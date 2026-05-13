@@ -11,7 +11,7 @@ CONTEXT_ID = st.secrets["LIVEAVATAR_CONTEXT_ID"]
 VOICE_ID = st.secrets["LIVEAVATAR_VOICE_ID"]
 
 BASE_URL = "https://api.liveavatar.com/v1"
-SESSION_DURATION_MS = 10000
+SESSION_DURATION_MS = 20000
 
 
 def create_session_token():
