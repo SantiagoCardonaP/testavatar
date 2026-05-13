@@ -1,9 +1,2 @@
 streamlit
-pandas
-matplotlib
-wordcloud
-openai>=1.0.0
-pillow
-python-docx
-fpdf
-reportlab
+streamlit requests
