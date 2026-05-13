@@ -11,7 +11,7 @@ CONTEXT_ID = st.secrets["LIVEAVATAR_CONTEXT_ID"]
 VOICE_ID = st.secrets["LIVEAVATAR_VOICE_ID"]
 
 BASE_URL = "https://api.liveavatar.com/v1"
-SESSION_DURATION_MS = 30_000
+SESSION_DURATION_MS = 10000
 
 
 def create_session_token():
@@ -75,28 +75,17 @@ def stop_session(session_id, session_token):
     return response.json()
 
 
-def reset_session_state():
-    st.session_state.session_token = None
-    st.session_state.session_id = None
-    st.session_state.livekit_url = None
-    st.session_state.livekit_client_token = None
-
-
-if "session_token" not in st.session_state:
-    st.session_state.session_token = None
-
-if "session_id" not in st.session_state:
-    st.session_state.session_id = None
-
-if "livekit_url" not in st.session_state:
-    st.session_state.livekit_url = None
-
-if "livekit_client_token" not in st.session_state:
-    st.session_state.livekit_client_token = None
+for key in [
+    "session_token",
+    "session_id",
+    "livekit_url",
+    "livekit_client_token"
+]:
+    if key not in st.session_state:
+        st.session_state[key] = None
 
 
 st.title("LiveAvatar en Streamlit")
-st.caption("La sesión se detiene automáticamente a nivel API después de 30 segundos. El último frame del avatar queda visible.")
 
 col1, col2 = st.columns(2)
 
@@ -109,13 +98,6 @@ with col2:
 
 if start_clicked:
     try:
-        # Si ya había una sesión activa, se detiene antes de crear otra.
-        if st.session_state.session_id and st.session_state.session_token:
-            try:
-                stop_session(st.session_state.session_id, st.session_state.session_token)
-            except requests.HTTPError:
-                pass
-
         token_data = create_session_token()
         session_token = token_data["session_token"]
 
@@ -139,9 +121,19 @@ if start_clicked:
 if stop_clicked:
     try:
         if st.session_state.session_id and st.session_state.session_token:
-            stop_session(st.session_state.session_id, st.session_state.session_token)
-            reset_session_state()
-            st.success("Sesión detenida correctamente.")
+            stop_session(
+                st.session_state.session_id,
+                st.session_state.session_token
+            )
+
+            # No limpiamos el contenedor visual desde Python.
+            # El frontend mantiene congelado el último frame hasta nueva sesión.
+            st.session_state.session_token = None
+            st.session_state.session_id = None
+            st.session_state.livekit_url = None
+            st.session_state.livekit_client_token = None
+
+            st.success("Sesión detenida a nivel del avatar.")
         else:
             st.warning("No hay una sesión activa.")
 
@@ -158,8 +150,8 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
     livekit_token = json.dumps(st.session_state.livekit_client_token)
     session_id = json.dumps(st.session_state.session_id)
     session_token = json.dumps(st.session_state.session_token)
-    base_url = json.dumps(BASE_URL)
-    session_duration_ms = SESSION_DURATION_MS
+    stop_url = json.dumps(f"{BASE_URL}/sessions/stop")
+    session_duration_ms = json.dumps(SESSION_DURATION_MS)
 
     html = f"""
     <div style="
@@ -198,19 +190,91 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
       const livekitToken = {livekit_token};
       const sessionId = {session_id};
       const sessionToken = {session_token};
-      const baseUrl = {base_url};
+      const stopUrl = {stop_url};
       const sessionDurationMs = {session_duration_ms};
 
       const statusEl = document.getElementById("status");
       const container = document.getElementById("avatar-container");
 
+      let currentVideoElement = null;
+      let sessionStopped = false;
+
       const room = new Room();
-      let stoppedByTimer = false;
+
+      function freezeLastFrame() {{
+        const video = currentVideoElement || container.querySelector("video");
+
+        if (!video || video.videoWidth === 0 || video.videoHeight === 0) {{
+          return false;
+        }}
+
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        const frozenImage = document.createElement("img");
+        frozenImage.src = canvas.toDataURL("image/png");
+        frozenImage.style.width = "100%";
+        frozenImage.style.height = "100%";
+        frozenImage.style.objectFit = "contain";
+
+        container.innerHTML = "";
+        container.appendChild(frozenImage);
+
+        return true;
+      }}
+
+      async function stopAvatarSession(reasonText) {{
+        if (sessionStopped) {{
+          return;
+        }}
+
+        sessionStopped = true;
+
+        try {{
+          statusEl.innerText = "Deteniendo sesión del avatar...";
+
+          // 1. Congela el último frame antes de cortar la sesión real.
+          freezeLastFrame();
+
+          // 2. Detiene la sesión real del avatar/API.
+          const response = await fetch(stopUrl, {{
+            method: "POST",
+            headers: {{
+              "Authorization": `Bearer ${{sessionToken}}`,
+              "Content-Type": "application/json",
+              "Accept": "application/json"
+            }},
+            body: JSON.stringify({{
+              session_id: sessionId,
+              reason: "USER_DISCONNECTED"
+            }})
+          }});
+
+          if (!response.ok) {{
+            const errorText = await response.text();
+            throw new Error(errorText || `HTTP ${{response.status}}`);
+          }}
+
+          // 3. Desconecta LiveKit solo después de congelar la imagen.
+          room.disconnect();
+
+          statusEl.innerText = reasonText;
+
+        }} catch (error) {{
+          console.error(error);
+          statusEl.innerText = "Error deteniendo sesión del avatar: " + error.message;
+        }}
+      }}
 
       room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {{
         if (track.kind === Track.Kind.Video) {{
           const videoElement = track.attach();
-          videoElement.id = "avatar-video";
+          currentVideoElement = videoElement;
+
           videoElement.style.width = "100%";
           videoElement.style.height = "100%";
           videoElement.style.objectFit = "contain";
@@ -220,7 +284,7 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
           container.innerHTML = "";
           container.appendChild(videoElement);
 
-          statusEl.innerText = "Avatar conectado. Micrófono activo.";
+          statusEl.innerText = "Avatar conectado";
         }}
 
         if (track.kind === Track.Kind.Audio) {{
@@ -230,74 +294,29 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
         }}
       }});
 
-      async function stopAvatarSessionAtApiLevel() {{
-        const response = await fetch(`${{baseUrl}}/sessions/stop`, {{
-          method: "POST",
-          headers: {{
-            "Authorization": `Bearer ${{sessionToken}}`,
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-          }},
-          body: JSON.stringify({{
-            session_id: sessionId,
-            reason: "USER_DISCONNECTED"
-          }})
-        }});
-
-        if (!response.ok) {{
-          const text = await response.text();
-          throw new Error(`No se pudo detener la sesión: ${{response.status}} ${{text}}`);
-        }}
-      }}
-
       async function connectAvatar() {{
         try {{
           await room.connect(livekitUrl, livekitToken);
 
-          // Habilita la entrada de audio del navegador y publica el micrófono a la sala.
+          // Habilita entrada de audio del micrófono.
+          // El navegador pedirá permiso la primera vez.
           await room.localParticipant.setMicrophoneEnabled(true);
 
           statusEl.innerText = "Sesión activa con micrófono";
 
+          // Detiene la sesión real del avatar a los 30 segundos.
+          // La app de Streamlit queda abierta y el último frame queda visible.
           setTimeout(async () => {{
-            try {{
-              stoppedByTimer = true;
-
-              // Detiene la sesión real del avatar a nivel API.
-              await stopAvatarSessionAtApiLevel();
-
-              // Desconecta LiveKit, pero NO limpia el contenedor ni reemplaza el video.
-              // Así el último frame del avatar queda visible mientras se inicia otra sesión.
-              room.disconnect();
-
-              const videoElement = document.getElementById("avatar-video");
-              if (videoElement) {{
-                videoElement.pause();
-                videoElement.style.opacity = "1";
-              }}
-
-              statusEl.innerText = "Sesión detenida automáticamente. El avatar queda visible para iniciar una nueva sesión.";
-            }} catch (error) {{
-              console.error(error);
-              statusEl.innerText = "Error deteniendo la sesión: " + error.message;
-            }}
+            await stopAvatarSession(
+              "Sesión detenida automáticamente. El avatar queda visible para iniciar una nueva sesión."
+            );
           }}, sessionDurationMs);
 
         }} catch (error) {{
           console.error(error);
-          statusEl.innerText = "Error conectando avatar o micrófono: " + error.message;
+          statusEl.innerText = "Error conectando avatar: " + error.message;
         }}
       }}
-
-      window.addEventListener("beforeunload", async () => {{
-        if (!stoppedByTimer) {{
-          try {{
-            await stopAvatarSessionAtApiLevel();
-          }} catch (error) {{
-            console.warn("No se pudo detener la sesión antes de cerrar la página", error);
-          }}
-        }}
-      }});
 
       connectAvatar();
     </script>
@@ -305,4 +324,4 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
 
     components.html(html, height=650)
 else:
-    st.info("Inicia una sesión para mostrar el avatar.")
+    st.info("Presiona 'Iniciar nueva sesión' para activar el avatar.")
