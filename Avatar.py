@@ -18,7 +18,7 @@ def create_session_token():
     url = f"{BASE_URL}/sessions/token"
 
     payload = {
-        "mode": "FULL",
+        "mode": "LITE",
         "avatar_id": AVATAR_ID,
         "avatar_persona": {
             "context_id": CONTEXT_ID,
