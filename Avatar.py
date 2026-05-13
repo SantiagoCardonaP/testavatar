@@ -3,10 +3,12 @@ import requests
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="LiveAvatar en Streamlit", layout="wide")
+st.set_page_config(page_title="LiveAvatar Streamlit", layout="wide")
 
 API_KEY = st.secrets["LIVEAVATAR_API_KEY"]
 AVATAR_ID = st.secrets["LIVEAVATAR_AVATAR_ID"]
+CONTEXT_ID = st.secrets["LIVEAVATAR_CONTEXT_ID"]
+VOICE_ID = st.secrets["LIVEAVATAR_VOICE_ID"]
 
 BASE_URL = "https://api.liveavatar.com/v1"
 
@@ -17,6 +19,11 @@ def create_session_token():
     payload = {
         "mode": "FULL",
         "avatar_id": AVATAR_ID,
+        "avatar_persona": {
+            "context_id": CONTEXT_ID,
+            "voice_id": VOICE_ID,
+            "language": "es"
+        },
         "is_sandbox": False,
         "video_settings": {
             "encoding": "VP8",
@@ -32,7 +39,6 @@ def create_session_token():
 
     response = requests.post(url, headers=headers, json=payload)
     response.raise_for_status()
-
     return response.json()["data"]
 
 
@@ -46,7 +52,6 @@ def start_session(session_token):
 
     response = requests.post(url, headers=headers)
     response.raise_for_status()
-
     return response.json()["data"]
 
 
@@ -54,7 +59,8 @@ def stop_session(session_id, session_token):
     url = f"{BASE_URL}/sessions/stop"
 
     payload = {
-        "session_id": session_id
+        "session_id": session_id,
+        "reason": "USER_DISCONNECTED"
     }
 
     headers = {
@@ -65,21 +71,23 @@ def stop_session(session_id, session_token):
 
     response = requests.post(url, headers=headers, json=payload)
     response.raise_for_status()
-
     return response.json()
 
 
-st.title("LiveAvatar en Streamlit")
-
 if "session_token" not in st.session_state:
     st.session_state.session_token = None
+
 if "session_id" not in st.session_state:
     st.session_state.session_id = None
+
 if "livekit_url" not in st.session_state:
     st.session_state.livekit_url = None
+
 if "livekit_client_token" not in st.session_state:
     st.session_state.livekit_client_token = None
 
+
+st.title("LiveAvatar en Streamlit")
 
 col1, col2 = st.columns(2)
 
@@ -106,7 +114,8 @@ if start_clicked:
 
     except requests.HTTPError as e:
         st.error(f"Error HTTP: {e}")
-        st.code(e.response.text if e.response is not None else "")
+        if e.response is not None:
+            st.code(e.response.text)
     except Exception as e:
         st.error(f"Error: {e}")
 
@@ -118,14 +127,20 @@ if stop_clicked:
                 st.session_state.session_id,
                 st.session_state.session_token
             )
-            st.success("Sesión detenida.")
-            st.session_state.session_id = None
+
             st.session_state.session_token = None
+            st.session_state.session_id = None
+            st.session_state.livekit_url = None
+            st.session_state.livekit_client_token = None
+
+            st.success("Sesión detenida correctamente.")
         else:
             st.warning("No hay una sesión activa.")
+
     except requests.HTTPError as e:
         st.error(f"Error HTTP: {e}")
-        st.code(e.response.text if e.response is not None else "")
+        if e.response is not None:
+            st.code(e.response.text)
     except Exception as e:
         st.error(f"Error: {e}")
 
@@ -133,15 +148,31 @@ if stop_clicked:
 if st.session_state.livekit_url and st.session_state.livekit_client_token:
     livekit_url = json.dumps(st.session_state.livekit_url)
     livekit_token = json.dumps(st.session_state.livekit_client_token)
-    session_id = json.dumps(st.session_state.session_id)
 
     html = f"""
-    <div style="width:100%;height:620px;background:#111;border-radius:16px;overflow:hidden;">
-      <div id="status" style="color:white;font-family:sans-serif;padding:12px;">
+    <div style="
+        width:100%;
+        height:620px;
+        background:#111;
+        border-radius:16px;
+        overflow:hidden;
+        font-family:Arial, sans-serif;
+    ">
+      <div id="status" style="
+          color:white;
+          padding:12px;
+          font-size:16px;
+      ">
         Conectando avatar...
       </div>
 
-      <div id="avatar-container" style="width:100%;height:560px;"></div>
+      <div id="avatar-container" style="
+          width:100%;
+          height:560px;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+      "></div>
     </div>
 
     <script type="module">
@@ -153,7 +184,6 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
 
       const livekitUrl = {livekit_url};
       const livekitToken = {livekit_token};
-      const sessionId = {session_id};
 
       const statusEl = document.getElementById("status");
       const container = document.getElementById("avatar-container");
@@ -168,7 +198,10 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
           videoElement.style.objectFit = "contain";
           videoElement.autoplay = true;
           videoElement.playsInline = true;
+
+          container.innerHTML = "";
           container.appendChild(videoElement);
+
           statusEl.innerText = "Avatar conectado";
         }}
 
@@ -184,17 +217,19 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
           await room.connect(livekitUrl, livekitToken);
           statusEl.innerText = "Sesión activa";
 
-          // Corta visualmente la sesión después de 30 segundos.
-          // El stop real del lado API lo maneja el botón de Streamlit.
           setTimeout(() => {{
             room.disconnect();
-            statusEl.innerText = "Sesión finalizada después de 30 segundos";
-            container.innerHTML = "";
+            container.innerHTML = `
+              <p style="color:white;font-size:20px;">
+                Sesión finalizada después de 30 segundos
+              </p>
+            `;
+            statusEl.innerText = "Sesión finalizada";
           }}, 30000);
 
         }} catch (error) {{
           console.error(error);
-          statusEl.innerText = "Error conectando LiveAvatar: " + error.message;
+          statusEl.innerText = "Error conectando avatar: " + error.message;
         }}
       }}
 
