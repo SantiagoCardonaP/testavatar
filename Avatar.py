@@ -3,7 +3,11 @@ import requests
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="LiveAvatar Streamlit", layout="wide")
+st.set_page_config(
+    page_title="Habla con nuestro agente",
+    layout="centered",
+    initial_sidebar_state="collapsed"
+)
 
 API_KEY = st.secrets["LIVEAVATAR_API_KEY"]
 AVATAR_ID = st.secrets["LIVEAVATAR_AVATAR_ID"]
@@ -11,7 +15,7 @@ CONTEXT_ID = st.secrets["LIVEAVATAR_CONTEXT_ID"]
 VOICE_ID = st.secrets["LIVEAVATAR_VOICE_ID"]
 
 BASE_URL = "https://api.liveavatar.com/v1"
-SESSION_DURATION_MS = 20000
+SESSION_DURATION_MS = 30000
 
 
 def create_session_token():
@@ -85,67 +89,139 @@ for key in [
         st.session_state[key] = None
 
 
-st.title("LiveAvatar en Streamlit")
-
-col1, col2 = st.columns(2)
-
-with col1:
-    start_clicked = st.button("Iniciar nueva sesión")
-
-with col2:
-    stop_clicked = st.button("Detener sesión ahora")
+is_running = bool(
+    st.session_state.session_id
+    and st.session_state.session_token
+    and st.session_state.livekit_url
+    and st.session_state.livekit_client_token
+)
 
 
-if start_clicked:
-    try:
-        token_data = create_session_token()
-        session_token = token_data["session_token"]
+st.markdown("""
+<style>
+    .block-container {
+        max-width: 520px;
+        padding-top: 1.5rem;
+        padding-bottom: 1.5rem;
+    }
 
-        session_data = start_session(session_token)
+    h1 {
+        text-align: center;
+        font-size: 2rem !important;
+        font-weight: 800 !important;
+        margin-bottom: 0.4rem !important;
+    }
 
-        st.session_state.session_token = session_token
-        st.session_state.session_id = session_data["session_id"]
-        st.session_state.livekit_url = session_data["livekit_url"]
-        st.session_state.livekit_client_token = session_data["livekit_client_token"]
+    .subtitle {
+        text-align: center;
+        color: #6b7280;
+        margin-bottom: 1.5rem;
+        font-size: 1rem;
+    }
 
-        st.success("Sesión iniciada correctamente.")
+    div.stButton > button {
+        width: 100%;
+        height: 58px;
+        border-radius: 999px;
+        font-size: 1.1rem;
+        font-weight: 800;
+        border: none;
+        background: linear-gradient(135deg, #2563eb, #7c3aed);
+        color: white;
+        box-shadow: 0 12px 28px rgba(37, 99, 235, 0.35);
+    }
 
-    except requests.HTTPError as e:
-        st.error(f"Error HTTP: {e}")
-        if e.response is not None:
-            st.code(e.response.text)
-    except Exception as e:
-        st.error(f"Error: {e}")
+    div.stButton > button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 16px 34px rgba(37, 99, 235, 0.45);
+    }
+
+    .status-card {
+        text-align: center;
+        background: #f8fafc;
+        border: 1px solid #e5e7eb;
+        border-radius: 18px;
+        padding: 0.9rem;
+        margin-bottom: 1rem;
+        color: #374151;
+        font-weight: 600;
+    }
+
+    @media (max-width: 600px) {
+        .block-container {
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }
+
+        h1 {
+            font-size: 1.7rem !important;
+        }
+    }
+</style>
+""", unsafe_allow_html=True)
 
 
-if stop_clicked:
-    try:
-        if st.session_state.session_id and st.session_state.session_token:
+st.title("Habla con nuestro agente")
+st.markdown(
+    "<div class='subtitle'>Activa el avatar y conversa directamente desde tu pantalla.</div>",
+    unsafe_allow_html=True
+)
+
+
+button_label = "Detener sesión" if is_running else "Iniciar sesión"
+
+if st.button(button_label):
+    if is_running:
+        try:
             stop_session(
                 st.session_state.session_id,
                 st.session_state.session_token
             )
 
-            # No limpiamos el contenedor visual desde Python.
-            # El frontend mantiene congelado el último frame hasta nueva sesión.
             st.session_state.session_token = None
             st.session_state.session_id = None
             st.session_state.livekit_url = None
             st.session_state.livekit_client_token = None
 
-            st.success("Sesión detenida a nivel del avatar.")
-        else:
-            st.warning("No hay una sesión activa.")
+            st.success("Sesión detenida correctamente.")
+            st.rerun()
 
-    except requests.HTTPError as e:
-        st.error(f"Error HTTP: {e}")
-        if e.response is not None:
-            st.code(e.response.text)
-    except Exception as e:
-        st.error(f"Error: {e}")
+        except requests.HTTPError as e:
+            st.error(f"Error HTTP: {e}")
+            if e.response is not None:
+                st.code(e.response.text)
+        except Exception as e:
+            st.error(f"Error: {e}")
+
+    else:
+        try:
+            token_data = create_session_token()
+            session_token = token_data["session_token"]
+
+            session_data = start_session(session_token)
+
+            st.session_state.session_token = session_token
+            st.session_state.session_id = session_data["session_id"]
+            st.session_state.livekit_url = session_data["livekit_url"]
+            st.session_state.livekit_client_token = session_data["livekit_client_token"]
+
+            st.success("Sesión iniciada correctamente.")
+            st.rerun()
+
+        except requests.HTTPError as e:
+            st.error(f"Error HTTP: {e}")
+            if e.response is not None:
+                st.code(e.response.text)
+        except Exception as e:
+            st.error(f"Error: {e}")
 
 
 if st.session_state.livekit_url and st.session_state.livekit_client_token:
+    st.markdown(
+        "<div class='status-card'>Avatar activo. Puedes hablar con el agente.</div>",
+        unsafe_allow_html=True
+    )
+
     livekit_url = json.dumps(st.session_state.livekit_url)
     livekit_token = json.dumps(st.session_state.livekit_client_token)
     session_id = json.dumps(st.session_state.session_id)
@@ -154,30 +230,62 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
     session_duration_ms = json.dumps(SESSION_DURATION_MS)
 
     html = f"""
-    <div style="
-        width:100%;
-        height:620px;
-        background:#111;
-        border-radius:16px;
-        overflow:hidden;
-        font-family:Arial, sans-serif;
-    ">
-      <div id="status" style="
-          color:white;
-          padding:12px;
-          font-size:16px;
-      ">
-        Conectando avatar...
-      </div>
-
-      <div id="avatar-container" style="
-          width:100%;
-          height:560px;
-          display:flex;
-          align-items:center;
-          justify-content:center;
-      "></div>
+    <div class="avatar-shell">
+      <div id="status">Conectando avatar...</div>
+      <div id="avatar-container"></div>
     </div>
+
+    <style>
+      .avatar-shell {{
+        width: 100%;
+        max-width: 430px;
+        height: min(72vh, 760px);
+        min-height: 560px;
+        margin: 0 auto;
+        background: radial-gradient(circle at top, #1f2937, #020617);
+        border-radius: 28px;
+        overflow: hidden;
+        font-family: Arial, sans-serif;
+        box-shadow: 0 22px 55px rgba(15, 23, 42, 0.35);
+        border: 1px solid rgba(255,255,255,0.12);
+      }}
+
+      #status {{
+        color: white;
+        text-align: center;
+        padding: 14px 12px;
+        font-size: 15px;
+        font-weight: 700;
+        background: rgba(15, 23, 42, 0.72);
+        backdrop-filter: blur(10px);
+      }}
+
+      #avatar-container {{
+        width: 100%;
+        height: calc(100% - 48px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #050816;
+      }}
+
+      #avatar-container video,
+      #avatar-container img {{
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center top;
+      }}
+
+      @media (max-width: 600px) {{
+        .avatar-shell {{
+          max-width: 100%;
+          height: 72vh;
+          min-height: 520px;
+          border-radius: 24px;
+        }}
+      }}
+    </style>
 
     <script type="module">
       import {{
@@ -219,7 +327,8 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
         frozenImage.src = canvas.toDataURL("image/png");
         frozenImage.style.width = "100%";
         frozenImage.style.height = "100%";
-        frozenImage.style.objectFit = "contain";
+        frozenImage.style.objectFit = "cover";
+        frozenImage.style.objectPosition = "center top";
 
         container.innerHTML = "";
         container.appendChild(frozenImage);
@@ -228,19 +337,15 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
       }}
 
       async function stopAvatarSession(reasonText) {{
-        if (sessionStopped) {{
-          return;
-        }}
+        if (sessionStopped) return;
 
         sessionStopped = true;
 
         try {{
-          statusEl.innerText = "Deteniendo sesión del avatar...";
+          statusEl.innerText = "Deteniendo sesión...";
 
-          // 1. Congela el último frame antes de cortar la sesión real.
           freezeLastFrame();
 
-          // 2. Detiene la sesión real del avatar/API.
           const response = await fetch(stopUrl, {{
             method: "POST",
             headers: {{
@@ -259,25 +364,24 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
             throw new Error(errorText || `HTTP ${{response.status}}`);
           }}
 
-          // 3. Desconecta LiveKit solo después de congelar la imagen.
           room.disconnect();
-
           statusEl.innerText = reasonText;
 
         }} catch (error) {{
           console.error(error);
-          statusEl.innerText = "Error deteniendo sesión del avatar: " + error.message;
+          statusEl.innerText = "Error deteniendo sesión: " + error.message;
         }}
       }}
 
-      room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {{
+      room.on(RoomEvent.TrackSubscribed, (track) => {{
         if (track.kind === Track.Kind.Video) {{
           const videoElement = track.attach();
           currentVideoElement = videoElement;
 
           videoElement.style.width = "100%";
           videoElement.style.height = "100%";
-          videoElement.style.objectFit = "contain";
+          videoElement.style.objectFit = "cover";
+          videoElement.style.objectPosition = "center top";
           videoElement.autoplay = true;
           videoElement.playsInline = true;
 
@@ -297,18 +401,13 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
       async function connectAvatar() {{
         try {{
           await room.connect(livekitUrl, livekitToken);
-
-          // Habilita entrada de audio del micrófono.
-          // El navegador pedirá permiso la primera vez.
           await room.localParticipant.setMicrophoneEnabled(true);
 
           statusEl.innerText = "Sesión activa con micrófono";
 
-          // Detiene la sesión real del avatar a los 30 segundos.
-          // La app de Streamlit queda abierta y el último frame queda visible.
           setTimeout(async () => {{
             await stopAvatarSession(
-              "Sesión detenida automáticamente. El avatar queda visible para iniciar una nueva sesión."
+              "Sesión detenida automáticamente."
             );
           }}, sessionDurationMs);
 
@@ -322,6 +421,7 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
     </script>
     """
 
-    components.html(html, height=650)
+    components.html(html, height=820)
+
 else:
-    st.info("Presiona 'Iniciar nueva sesión' para activar el avatar.")
+    st.info("Presiona el botón para iniciar una sesión con el avatar.")
