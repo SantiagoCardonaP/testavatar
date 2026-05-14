@@ -189,13 +189,12 @@ html = f"""
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 2rem 1rem 1.5rem;
-    gap: 1.4rem;
+    padding: 1.5rem 1rem 1rem;
+    gap: 1.1rem;
     background:
       radial-gradient(ellipse 70% 40% at 50% 0%, rgba(59,107,255,0.13) 0%, transparent 60%),
       radial-gradient(ellipse 50% 30% at 80% 100%, rgba(139,61,255,0.10) 0%, transparent 55%),
       var(--bg);
-    min-height: 100vh;
   }}
 
   .hdr {{ text-align: center; width: 100%; max-width: 460px; }}
@@ -230,7 +229,8 @@ html = f"""
   .viewport {{
     position: relative;
     width: 100%;
-    aspect-ratio: 3 / 4;
+    /* Altura fija: suficiente para mostrar el avatar sin cortar el botón */
+    height: clamp(340px, 58vh, 520px);
     background: #06060e;
     overflow: hidden;
     display: flex;
@@ -341,10 +341,11 @@ html = f"""
   .status.err {{ color: #f87171; }}
 
   @media (max-width: 500px) {{
-    .page {{ padding: 1.2rem 0.6rem 1rem; gap: 1rem; }}
+    .page {{ padding: 1rem 0.6rem 0.8rem; gap: 0.9rem; }}
     .card {{ border-radius: 18px; }}
     .card-footer {{ padding: 0.85rem 0.9rem 1rem; }}
     #action-btn {{ height: 46px; }}
+    .viewport {{ height: clamp(300px, 55vh, 440px); }}
   }}
 </style>
 </head>
@@ -543,4 +544,4 @@ html = f"""
 </html>
 """
 
-components.html(html, height=800, scrolling=False)
+components.html(html, height=760, scrolling=False)
