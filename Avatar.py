@@ -338,7 +338,7 @@ if should_show_avatar:
         width: 100%;
         height: 100%;
         max-width: none;
-        object-fit: cover;
+        object-fit: contain;
         object-position: center center;
         image-rendering: auto;
         backface-visibility: hidden;
@@ -508,7 +508,7 @@ if should_show_avatar:
           videoElement.style.width = "100%";
           videoElement.style.height = "100%";
           videoElement.style.maxWidth = "420px";
-          videoElement.style.objectFit = "cover";
+          videoElement.style.objectFit = "contain";
           videoElement.style.objectPosition = "center center";
           videoElement.style.imageRendering = "auto";
           videoElement.style.backfaceVisibility = "hidden";
