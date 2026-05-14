@@ -133,7 +133,17 @@ st.markdown("""
         margin: 0.5rem auto 1rem auto;
     }
 
-    .button-wrap div[data-testid="stButton"] {
+    .button-wrap-hidden {
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        opacity: 0;
+        position: absolute;
+        pointer-events: none;
+    }
+
+    .button-wrap div[data-testid="stButton"],
+    .button-wrap-hidden div[data-testid="stButton"] {
         width: 100%;
         display: flex;
         justify-content: center;
@@ -206,7 +216,15 @@ st.markdown(
 
 button_label = "Detener sesión" if is_running else "Iniciar sesión"
 
-st.markdown("<div class='button-wrap'>", unsafe_allow_html=True)
+should_show_avatar = bool(
+    st.session_state.livekit_url
+    and st.session_state.livekit_client_token
+    and (is_running or st.session_state.has_avatar_preview)
+)
+
+button_wrap_class = "button-wrap-hidden" if should_show_avatar else "button-wrap"
+
+st.markdown(f"<div class='{button_wrap_class}'>", unsafe_allow_html=True)
 button_clicked = st.button(button_label, use_container_width=False)
 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -259,24 +277,7 @@ if button_clicked:
             st.error(f"Error: {e}")
 
 
-should_show_avatar = bool(
-    st.session_state.livekit_url
-    and st.session_state.livekit_client_token
-    and (is_running or st.session_state.has_avatar_preview)
-)
-
 if should_show_avatar:
-    status_message = (
-        "Avatar activo. Puedes hablar con el agente."
-        if is_running
-        else "Sesión detenida. Vista previa conservada."
-    )
-
-    st.markdown(
-        f"<div class='status-card'>{status_message}</div>",
-        unsafe_allow_html=True
-    )
-
     livekit_url = json.dumps(st.session_state.livekit_url)
     livekit_token = json.dumps(st.session_state.livekit_client_token)
     session_id = json.dumps(st.session_state.session_id)
@@ -287,7 +288,11 @@ if should_show_avatar:
 
     html = f"""
     <div class="avatar-shell">
-      <div id="status">Cargando avatar...</div>
+      <div id="status">
+        <button id="avatar-action-btn" type="button">
+          {button_label}
+        </button>
+      </div>
       <div id="avatar-container">
         <div class="avatar-placeholder">Vista previa del avatar</div>
       </div>
@@ -317,11 +322,32 @@ if should_show_avatar:
       #status {{
         color: white;
         text-align: center;
-        padding: 14px 12px;
+        padding: 10px 12px;
         font-size: 15px;
         font-weight: 800;
         background: rgba(15, 23, 42, 0.88);
         backdrop-filter: blur(10px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }}
+
+      #avatar-action-btn {{
+        width: min(86%, 320px);
+        min-height: 44px;
+        border: none;
+        border-radius: 999px;
+        background: linear-gradient(135deg, #2563eb, #7c3aed);
+        color: #ffffff;
+        font-size: 16px;
+        font-weight: 850;
+        cursor: pointer;
+        box-shadow: 0 10px 26px rgba(37, 99, 235, 0.45);
+      }}
+
+      #avatar-action-btn:hover {{
+        transform: translateY(-1px);
+        box-shadow: 0 14px 32px rgba(37, 99, 235, 0.58);
       }}
 
       #avatar-container {{
@@ -338,7 +364,7 @@ if should_show_avatar:
         width: 100%;
         height: 100%;
         max-width: none;
-        object-fit: contain;
+        object-fit: cover;
         object-position: center center;
         image-rendering: auto;
         backface-visibility: hidden;
@@ -385,8 +411,20 @@ if should_show_avatar:
       const isRunning = {is_running_js};
 
       const statusEl = document.getElementById("status");
+      const actionBtn = document.getElementById("avatar-action-btn");
       const container = document.getElementById("avatar-container");
       const previewKey = "liveavatar_last_preview";
+
+      actionBtn.addEventListener("click", () => {
+        const buttons = window.parent.document.querySelectorAll("button");
+        const target = Array.from(buttons).find((button) =>
+          button.innerText.trim() === actionBtn.innerText.trim()
+        );
+
+        if (target) {
+          target.click();
+        }
+      });
 
       let currentVideoElement = null;
       let sessionStopped = false;
@@ -420,8 +458,8 @@ if should_show_avatar:
         previewImage.alt = "Vista previa del avatar";
         previewImage.style.width = "100%";
         previewImage.style.height = "100%";
-        previewImage.style.maxWidth = "420px";
-        previewImage.style.objectFit = "contain";
+        previewImage.style.maxWidth = "none";
+        previewImage.style.objectFit = "cover";
         previewImage.style.objectPosition = "center center";
         previewImage.style.imageRendering = "auto";
         previewImage.style.backfaceVisibility = "hidden";
@@ -429,7 +467,7 @@ if should_show_avatar:
 
         container.innerHTML = "";
         container.appendChild(previewImage);
-        statusEl.innerText = statusText;
+        statusEl.title = statusText;
         return true;
       }}
 
@@ -470,7 +508,7 @@ if should_show_avatar:
         sessionStopped = true;
 
         try {{
-          statusEl.innerText = "Deteniendo sesión...";
+          statusEl.title = "Deteniendo sesión...";
           captureCurrentFrame(false);
 
           const response = await fetch(stopUrl, {{
@@ -492,11 +530,11 @@ if should_show_avatar:
           }}
 
           room.disconnect();
-          statusEl.innerText = reasonText;
+          statusEl.title = reasonText;
 
         }} catch (error) {{
           console.error(error);
-          statusEl.innerText = "Error deteniendo sesión: " + error.message;
+          statusEl.title = "Error deteniendo sesión: " + error.message;
         }}
       }}
 
@@ -507,8 +545,8 @@ if should_show_avatar:
 
           videoElement.style.width = "100%";
           videoElement.style.height = "100%";
-          videoElement.style.maxWidth = "420px";
-          videoElement.style.objectFit = "contain";
+          videoElement.style.maxWidth = "none";
+          videoElement.style.objectFit = "cover";
           videoElement.style.objectPosition = "center center";
           videoElement.style.imageRendering = "auto";
           videoElement.style.backfaceVisibility = "hidden";
@@ -519,7 +557,7 @@ if should_show_avatar:
           container.innerHTML = "";
           container.appendChild(videoElement);
 
-          statusEl.innerText = "Avatar conectado";
+          statusEl.title = "Avatar conectado";
           startPreviewCapture();
         }}
 
@@ -534,7 +572,7 @@ if should_show_avatar:
         if (!isRunning) {{
           const savedPreview = storageGet(previewKey);
           if (!drawPreviewImage(savedPreview, "Sesión detenida. Vista previa conservada.")) {{
-            statusEl.innerText = "Vista previa del avatar";
+            statusEl.title = "Vista previa del avatar";
           }}
           return;
         }}
@@ -543,7 +581,7 @@ if should_show_avatar:
           await room.connect(livekitUrl, livekitToken);
           await room.localParticipant.setMicrophoneEnabled(true);
 
-          statusEl.innerText = "Sesión activa con micrófono";
+          statusEl.title = "Sesión activa con micrófono";
 
           setTimeout(async () => {{
             await stopAvatarSession("Sesión detenida automáticamente. Vista previa conservada.");
@@ -553,7 +591,7 @@ if should_show_avatar:
           console.error(error);
           const savedPreview = storageGet(previewKey);
           if (!drawPreviewImage(savedPreview, "Vista previa del avatar")) {{
-            statusEl.innerText = "Error conectando avatar: " + error.message;
+            statusEl.title = "Error conectando avatar: " + error.message;
           }}
         }}
       }}
