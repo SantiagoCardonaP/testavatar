@@ -83,7 +83,8 @@ for key in [
     "session_token",
     "session_id",
     "livekit_url",
-    "livekit_client_token"
+    "livekit_client_token",
+    "avatar_preview_html"
 ]:
     if key not in st.session_state:
         st.session_state[key] = None
@@ -119,8 +120,14 @@ st.markdown("""
         font-size: 1rem;
     }
 
+    div.stButton {
+        display: flex;
+        justify-content: center;
+    }
+
     div.stButton > button {
-        width: 100%;
+        width: 85%;
+        max-width: 360px;
         height: 58px;
         border-radius: 999px;
         font-size: 1.1rem;
@@ -178,12 +185,13 @@ if st.button(button_label):
                 st.session_state.session_token
             )
 
+            # Solo limpiamos los datos que indican que la sesion esta activa.
+            # Conservamos livekit_url y livekit_client_token para que el iframe
+            # mantenga visible la ultima vista previa del avatar.
             st.session_state.session_token = None
             st.session_state.session_id = None
-            st.session_state.livekit_url = None
-            st.session_state.livekit_client_token = None
 
-            st.success("Sesión detenida correctamente.")
+            st.success("Sesión detenida correctamente. El avatar queda visible.")
             st.rerun()
 
         except requests.HTTPError as e:
@@ -217,8 +225,13 @@ if st.button(button_label):
 
 
 if st.session_state.livekit_url and st.session_state.livekit_client_token:
+    if is_running:
+        status_message = "Avatar activo. Puedes hablar con el agente."
+    else:
+        status_message = "Sesión detenida. Se conserva la vista previa del avatar."
+
     st.markdown(
-        "<div class='status-card'>Avatar activo. Puedes hablar con el agente.</div>",
+        f"<div class='status-card'>{status_message}</div>",
         unsafe_allow_html=True
     )
 
@@ -228,11 +241,16 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
     session_token = json.dumps(st.session_state.session_token)
     stop_url = json.dumps(f"{BASE_URL}/sessions/stop")
     session_duration_ms = json.dumps(SESSION_DURATION_MS)
+    is_running_js = json.dumps(is_running)
 
     html = f"""
     <div class="avatar-shell">
-      <div id="status">Conectando avatar...</div>
-      <div id="avatar-container"></div>
+      <div id="status">Cargando avatar...</div>
+      <div id="avatar-container">
+        <div class="avatar-placeholder">
+          Vista previa del avatar
+        </div>
+      </div>
     </div>
 
     <style>
@@ -277,6 +295,20 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
         object-position: center top;
       }}
 
+      .avatar-placeholder {{
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: rgba(255,255,255,0.72);
+        font-size: 16px;
+        font-weight: 700;
+        background:
+          radial-gradient(circle at 50% 22%, rgba(124, 58, 237, 0.35), transparent 34%),
+          linear-gradient(180deg, #111827 0%, #020617 100%);
+      }}
+
       @media (max-width: 600px) {{
         .avatar-shell {{
           max-width: 100%;
@@ -300,13 +332,13 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
       const sessionToken = {session_token};
       const stopUrl = {stop_url};
       const sessionDurationMs = {session_duration_ms};
+      const isRunning = {is_running_js};
 
       const statusEl = document.getElementById("status");
       const container = document.getElementById("avatar-container");
 
       let currentVideoElement = null;
       let sessionStopped = false;
-
       const room = new Room();
 
       function freezeLastFrame() {{
@@ -337,13 +369,12 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
       }}
 
       async function stopAvatarSession(reasonText) {{
-        if (sessionStopped) return;
+        if (sessionStopped || !sessionId || !sessionToken) return;
 
         sessionStopped = true;
 
         try {{
           statusEl.innerText = "Deteniendo sesión...";
-
           freezeLastFrame();
 
           const response = await fetch(stopUrl, {{
@@ -399,6 +430,11 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
       }});
 
       async function connectAvatar() {{
+        if (!isRunning) {{
+          statusEl.innerText = "Vista previa del avatar";
+          return;
+        }}
+
         try {{
           await room.connect(livekitUrl, livekitToken);
           await room.localParticipant.setMicrophoneEnabled(true);
@@ -406,9 +442,7 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
           statusEl.innerText = "Sesión activa con micrófono";
 
           setTimeout(async () => {{
-            await stopAvatarSession(
-              "Sesión detenida automáticamente."
-            );
+            await stopAvatarSession("Sesión detenida automáticamente. Vista previa conservada.");
           }}, sessionDurationMs);
 
         }} catch (error) {{
