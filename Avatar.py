@@ -415,16 +415,16 @@ if should_show_avatar:
       const container = document.getElementById("avatar-container");
       const previewKey = "liveavatar_last_preview";
 
-      actionBtn.addEventListener("click", () => {
+      actionBtn.addEventListener("click", () => {{
         const buttons = window.parent.document.querySelectorAll("button");
         const target = Array.from(buttons).find((button) =>
           button.innerText.trim() === actionBtn.innerText.trim()
         );
 
-        if (target) {
+        if (target) {{
           target.click();
-        }
-      });
+        }}
+      }});
 
       let currentVideoElement = null;
       let sessionStopped = false;
