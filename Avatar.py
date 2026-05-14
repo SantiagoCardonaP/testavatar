@@ -31,8 +31,8 @@ def create_session_token():
         },
         "is_sandbox": False,
         "video_settings": {
-            "encoding": "VP8",
-            "quality": "medium"
+            "encoding": "H264",
+            "quality": "high"
         }
     }
 
@@ -84,7 +84,7 @@ for key in [
     "session_id",
     "livekit_url",
     "livekit_client_token",
-    "avatar_preview_html"
+    "has_avatar_preview"
 ]:
     if key not in st.session_state:
         st.session_state[key] = None
@@ -100,47 +100,65 @@ is_running = bool(
 
 st.markdown("""
 <style>
+    .stApp {
+        background: #111111;
+    }
+
     .block-container {
-        max-width: 520px;
-        padding-top: 1.5rem;
+        max-width: 560px;
+        padding-top: 1.6rem;
         padding-bottom: 1.5rem;
     }
 
     h1 {
         text-align: center;
         font-size: 2rem !important;
-        font-weight: 800 !important;
+        font-weight: 850 !important;
         margin-bottom: 0.4rem !important;
+        color: #ffffff !important;
     }
 
     .subtitle {
         text-align: center;
-        color: #6b7280;
+        color: #94a3b8;
         margin-bottom: 1.5rem;
         font-size: 1rem;
     }
 
-    div.stButton {
+    .button-wrap {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 0.5rem auto 1rem auto;
+    }
+
+    .button-wrap div[data-testid="stButton"] {
+        width: 100%;
         display: flex;
         justify-content: center;
     }
 
-    div.stButton > button {
-        width: 85%;
-        max-width: 360px;
-        height: 58px;
+    .button-wrap div[data-testid="stButton"] > button {
+        display: block;
+        margin-left: auto !important;
+        margin-right: auto !important;
+        width: 78% !important;
+        max-width: 360px !important;
+        min-width: 230px !important;
+        height: 60px;
         border-radius: 999px;
-        font-size: 1.1rem;
-        font-weight: 800;
+        font-size: 1.08rem;
+        font-weight: 850;
         border: none;
         background: linear-gradient(135deg, #2563eb, #7c3aed);
         color: white;
-        box-shadow: 0 12px 28px rgba(37, 99, 235, 0.35);
+        box-shadow: 0 12px 30px rgba(37, 99, 235, 0.45);
     }
 
-    div.stButton > button:hover {
+    .button-wrap div[data-testid="stButton"] > button:hover {
         transform: translateY(-1px);
-        box-shadow: 0 16px 34px rgba(37, 99, 235, 0.45);
+        box-shadow: 0 16px 36px rgba(37, 99, 235, 0.58);
     }
 
     .status-card {
@@ -149,9 +167,16 @@ st.markdown("""
         border: 1px solid #e5e7eb;
         border-radius: 18px;
         padding: 0.9rem;
-        margin-bottom: 1rem;
-        color: #374151;
-        font-weight: 600;
+        margin: 0.5rem auto 1rem auto;
+        color: #1e293b;
+        font-weight: 750;
+        max-width: 490px;
+    }
+
+    div[data-testid="stAlert"] {
+        max-width: 490px;
+        margin-left: auto;
+        margin-right: auto;
     }
 
     @media (max-width: 600px) {
@@ -162,6 +187,10 @@ st.markdown("""
 
         h1 {
             font-size: 1.7rem !important;
+        }
+
+        .button-wrap div[data-testid="stButton"] > button {
+            width: 88% !important;
         }
     }
 </style>
@@ -177,7 +206,11 @@ st.markdown(
 
 button_label = "Detener sesión" if is_running else "Iniciar sesión"
 
-if st.button(button_label):
+st.markdown("<div class='button-wrap'>", unsafe_allow_html=True)
+button_clicked = st.button(button_label, use_container_width=False)
+st.markdown("</div>", unsafe_allow_html=True)
+
+if button_clicked:
     if is_running:
         try:
             stop_session(
@@ -185,13 +218,14 @@ if st.button(button_label):
                 st.session_state.session_token
             )
 
-            # Solo limpiamos los datos que indican que la sesion esta activa.
-            # Conservamos livekit_url y livekit_client_token para que el iframe
-            # mantenga visible la ultima vista previa del avatar.
+            # Marcamos la sesion como detenida, pero NO borramos livekit_url ni
+            # livekit_client_token. El componente usa la ultima imagen guardada
+            # en sessionStorage/localStorage para conservar la vista previa.
             st.session_state.session_token = None
             st.session_state.session_id = None
+            st.session_state.has_avatar_preview = True
 
-            st.success("Sesión detenida correctamente. El avatar queda visible.")
+            st.success("Sesión detenida correctamente. Vista previa conservada.")
             st.rerun()
 
         except requests.HTTPError as e:
@@ -212,6 +246,7 @@ if st.button(button_label):
             st.session_state.session_id = session_data["session_id"]
             st.session_state.livekit_url = session_data["livekit_url"]
             st.session_state.livekit_client_token = session_data["livekit_client_token"]
+            st.session_state.has_avatar_preview = True
 
             st.success("Sesión iniciada correctamente.")
             st.rerun()
@@ -224,11 +259,18 @@ if st.button(button_label):
             st.error(f"Error: {e}")
 
 
-if st.session_state.livekit_url and st.session_state.livekit_client_token:
-    if is_running:
-        status_message = "Avatar activo. Puedes hablar con el agente."
-    else:
-        status_message = "Sesión detenida. Se conserva la vista previa del avatar."
+should_show_avatar = bool(
+    st.session_state.livekit_url
+    and st.session_state.livekit_client_token
+    and (is_running or st.session_state.has_avatar_preview)
+)
+
+if should_show_avatar:
+    status_message = (
+        "Avatar activo. Puedes hablar con el agente."
+        if is_running
+        else "Sesión detenida. Vista previa conservada."
+    )
 
     st.markdown(
         f"<div class='status-card'>{status_message}</div>",
@@ -247,25 +289,29 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
     <div class="avatar-shell">
       <div id="status">Cargando avatar...</div>
       <div id="avatar-container">
-        <div class="avatar-placeholder">
-          Vista previa del avatar
-        </div>
+        <div class="avatar-placeholder">Vista previa del avatar</div>
       </div>
     </div>
 
     <style>
+      html, body {{
+        margin: 0;
+        padding: 0;
+        background: transparent;
+      }}
+
       .avatar-shell {{
         width: 100%;
         max-width: 430px;
         height: min(72vh, 760px);
         min-height: 560px;
         margin: 0 auto;
-        background: radial-gradient(circle at top, #1f2937, #020617);
+        background: #000;
         border-radius: 28px;
         overflow: hidden;
         font-family: Arial, sans-serif;
-        box-shadow: 0 22px 55px rgba(15, 23, 42, 0.35);
-        border: 1px solid rgba(255,255,255,0.12);
+        box-shadow: 0 22px 55px rgba(15, 23, 42, 0.38);
+        border: 1px solid rgba(255,255,255,0.14);
       }}
 
       #status {{
@@ -273,8 +319,8 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
         text-align: center;
         padding: 14px 12px;
         font-size: 15px;
-        font-weight: 700;
-        background: rgba(15, 23, 42, 0.72);
+        font-weight: 800;
+        background: rgba(15, 23, 42, 0.88);
         backdrop-filter: blur(10px);
       }}
 
@@ -284,15 +330,19 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
         display: flex;
         align-items: center;
         justify-content: center;
-        background: #050816;
+        background: #000;
       }}
 
       #avatar-container video,
       #avatar-container img {{
         width: 100%;
         height: 100%;
-        object-fit: cover;
-        object-position: center top;
+        max-width: 420px;
+        object-fit: contain;
+        object-position: center center;
+        image-rendering: auto;
+        backface-visibility: hidden;
+        transform: translateZ(0);
       }}
 
       .avatar-placeholder {{
@@ -303,7 +353,7 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
         justify-content: center;
         color: rgba(255,255,255,0.72);
         font-size: 16px;
-        font-weight: 700;
+        font-weight: 800;
         background:
           radial-gradient(circle at 50% 22%, rgba(124, 58, 237, 0.35), transparent 34%),
           linear-gradient(180deg, #111827 0%, #020617 100%);
@@ -336,12 +386,54 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
 
       const statusEl = document.getElementById("status");
       const container = document.getElementById("avatar-container");
+      const previewKey = "liveavatar_last_preview";
 
       let currentVideoElement = null;
       let sessionStopped = false;
+      let previewInterval = null;
       const room = new Room();
 
-      function freezeLastFrame() {{
+      function storageSet(key, value) {{
+        try {{ window.sessionStorage.setItem(key, value); }} catch (e) {{}}
+        try {{ window.localStorage.setItem(key, value); }} catch (e) {{}}
+      }}
+
+      function storageGet(key) {{
+        try {{
+          const value = window.sessionStorage.getItem(key);
+          if (value) return value;
+        }} catch (e) {{}}
+
+        try {{
+          const value = window.localStorage.getItem(key);
+          if (value) return value;
+        }} catch (e) {{}}
+
+        return null;
+      }}
+
+      function drawPreviewImage(dataUrl, statusText) {{
+        if (!dataUrl) return false;
+
+        const previewImage = document.createElement("img");
+        previewImage.src = dataUrl;
+        previewImage.alt = "Vista previa del avatar";
+        previewImage.style.width = "100%";
+        previewImage.style.height = "100%";
+        previewImage.style.maxWidth = "420px";
+        previewImage.style.objectFit = "contain";
+        previewImage.style.objectPosition = "center center";
+        previewImage.style.imageRendering = "auto";
+        previewImage.style.backfaceVisibility = "hidden";
+        previewImage.style.transform = "translateZ(0)";
+
+        container.innerHTML = "";
+        container.appendChild(previewImage);
+        statusEl.innerText = statusText;
+        return true;
+      }}
+
+      function captureCurrentFrame(saveOnly = false) {{
         const video = currentVideoElement || container.querySelector("video");
 
         if (!video || video.videoWidth === 0 || video.videoHeight === 0) {{
@@ -352,20 +444,24 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
 
-        const ctx = canvas.getContext("2d");
+        const ctx = canvas.getContext("2d", {{ alpha: false }});
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        const frozenImage = document.createElement("img");
-        frozenImage.src = canvas.toDataURL("image/png");
-        frozenImage.style.width = "100%";
-        frozenImage.style.height = "100%";
-        frozenImage.style.objectFit = "cover";
-        frozenImage.style.objectPosition = "center top";
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+        storageSet(previewKey, dataUrl);
 
-        container.innerHTML = "";
-        container.appendChild(frozenImage);
+        if (!saveOnly) {{
+          drawPreviewImage(dataUrl, "Sesión detenida. Vista previa conservada.");
+        }}
 
         return true;
+      }}
+
+      function startPreviewCapture() {{
+        if (previewInterval) return;
+        previewInterval = setInterval(() => {{
+          captureCurrentFrame(true);
+        }}, 900);
       }}
 
       async function stopAvatarSession(reasonText) {{
@@ -375,7 +471,7 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
 
         try {{
           statusEl.innerText = "Deteniendo sesión...";
-          freezeLastFrame();
+          captureCurrentFrame(false);
 
           const response = await fetch(stopUrl, {{
             method: "POST",
@@ -411,8 +507,12 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
 
           videoElement.style.width = "100%";
           videoElement.style.height = "100%";
-          videoElement.style.objectFit = "cover";
-          videoElement.style.objectPosition = "center top";
+          videoElement.style.maxWidth = "420px";
+          videoElement.style.objectFit = "contain";
+          videoElement.style.objectPosition = "center center";
+          videoElement.style.imageRendering = "auto";
+          videoElement.style.backfaceVisibility = "hidden";
+          videoElement.style.transform = "translateZ(0)";
           videoElement.autoplay = true;
           videoElement.playsInline = true;
 
@@ -420,6 +520,7 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
           container.appendChild(videoElement);
 
           statusEl.innerText = "Avatar conectado";
+          startPreviewCapture();
         }}
 
         if (track.kind === Track.Kind.Audio) {{
@@ -431,7 +532,10 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
 
       async function connectAvatar() {{
         if (!isRunning) {{
-          statusEl.innerText = "Vista previa del avatar";
+          const savedPreview = storageGet(previewKey);
+          if (!drawPreviewImage(savedPreview, "Sesión detenida. Vista previa conservada.")) {{
+            statusEl.innerText = "Vista previa del avatar";
+          }}
           return;
         }}
 
@@ -447,7 +551,10 @@ if st.session_state.livekit_url and st.session_state.livekit_client_token:
 
         }} catch (error) {{
           console.error(error);
-          statusEl.innerText = "Error conectando avatar: " + error.message;
+          const savedPreview = storageGet(previewKey);
+          if (!drawPreviewImage(savedPreview, "Vista previa del avatar")) {{
+            statusEl.innerText = "Error conectando avatar: " + error.message;
+          }}
         }}
       }}
 
