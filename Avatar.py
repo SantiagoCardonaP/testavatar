@@ -4,7 +4,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="Habla con nuestro agente",
+    page_title="Julius Fest — Asistente Virtual",
     layout="centered",
     initial_sidebar_state="collapsed"
 )
@@ -75,25 +75,37 @@ is_running = bool(
     and st.session_state.livekit_client_token
 )
 
-# ── CSS global ────────────────────────────────────────────────────────────────
-# El botón de Streamlit se saca del flujo con position:fixed off-screen.
-# Así NO ocupa espacio visual pero sigue existiendo en el DOM del padre,
-# donde el JS del iframe puede encontrarlo y hacer .click().
+# ── CSS global de Streamlit ───────────────────────────────────────────────────
+# Pantalla objetivo: 1080×1920px vertical (42").
+# Chrome en modo normal tiene ~56px de barra. Para que la app se vea completa
+# al hacer scroll (y así ocultar la barra), añadimos padding-top: 60px en
+# .stApp — el usuario hace scroll hacia arriba, la barra de Chrome desaparece
+# y la app queda full-screen.
 st.markdown("""
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap');
+
     #MainMenu, footer, header { visibility: hidden; }
 
-    .stApp { background: #0a0a0f; }
+    html, body, .stApp {
+        font-family: 'Montserrat', sans-serif !important;
+        background: #0a0a0f !important;
+    }
+
+    /* Padding superior = espacio para que Chrome se oculte al hacer scroll */
+    .stApp {
+        padding-top: 64px !important;
+    }
 
     .block-container {
-        max-width: 600px !important;
+        max-width: 640px !important;
         padding-top: 0 !important;
         padding-bottom: 0 !important;
         padding-left: 0.5rem !important;
         padding-right: 0.5rem !important;
     }
 
-    /* Botón de Streamlit: fuera de pantalla, invisible, sin espacio */
+    /* Botón Streamlit: off-screen, invisible, sin espacio en el layout */
     div[data-testid="stButton"] {
         position: fixed !important;
         top: -9999px !important;
@@ -108,8 +120,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ── Botón Streamlit (oculto visualmente, activado por JS del iframe) ──────────
-btn_label   = "Detener sesión" if is_running else "Iniciar sesión"
+# ── Botón Streamlit oculto (el iframe hace .click() sobre él) ─────────────────
+btn_label   = "Detener conversación" if is_running else "Toca para conversar"
 btn_clicked = st.button(btn_label, key="streamlit_action_btn")
 
 if btn_clicked:
@@ -154,6 +166,11 @@ session_dur_ms = json.dumps(SESSION_DURATION_MS)
 is_running_js  = json.dumps(is_running)
 btn_label_js   = json.dumps(btn_label)
 
+# Altura del iframe calibrada para 1080×1920px vertical:
+# 1920 - 64 (padding-top Streamlit) - 56 (barra Chrome) - 40 (márgenes Streamlit) ≈ 1780
+# Usamos 1760 con algo de holgura.
+IFRAME_HEIGHT = 1760
+
 html = f"""
 <!DOCTYPE html>
 <html lang="es">
@@ -161,77 +178,114 @@ html = f"""
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
 
   :root {{
     --bg:    #0a0a0f;
     --card:  #0f0f1a;
-    --bdr:   rgba(255,255,255,0.08);
+    --bdr:   rgba(255,255,255,0.09);
     --a1:    #3b6bff;
     --a2:    #8b3dff;
     --text:  #e8e8f0;
-    --muted: #6b7280;
-    --r:     22px;
+    --muted: #7c849a;
+    --r:     24px;
+    --font:  'Montserrat', sans-serif;
+
+    /* Pantalla 1080×1920 vertical.
+       El iframe tiene {IFRAME_HEIGHT}px de alto.
+       Repartimos: header ~200px + gap + card (viewport + footer).
+       El viewport ocupa el resto disponible. */
+    --header-h:   190px;
+    --footer-h:   130px;  /* botón + status + padding */
+    --gap:        28px;
+    --viewport-h: calc({IFRAME_HEIGHT}px - var(--header-h) - var(--footer-h) - var(--gap) * 2 - 48px);
   }}
 
   html, body {{
     margin: 0; padding: 0;
     background: transparent;
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font);
     color: var(--text);
     -webkit-font-smoothing: antialiased;
+    height: {IFRAME_HEIGHT}px;
+    overflow: hidden;
   }}
 
+  /* Fondo con gradientes */
   .page {{
     width: 100%;
+    height: {IFRAME_HEIGHT}px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 1.5rem 1rem 1rem;
-    gap: 1.1rem;
+    justify-content: flex-start;
+    padding: 40px 24px 24px;
+    gap: var(--gap);
     background:
-      radial-gradient(ellipse 70% 40% at 50% 0%, rgba(59,107,255,0.13) 0%, transparent 60%),
-      radial-gradient(ellipse 50% 30% at 80% 100%, rgba(139,61,255,0.10) 0%, transparent 55%),
+      radial-gradient(ellipse 80% 35% at 50% 0%, rgba(59,107,255,0.18) 0%, transparent 55%),
+      radial-gradient(ellipse 55% 25% at 85% 95%, rgba(139,61,255,0.14) 0%, transparent 50%),
       var(--bg);
+    overflow: hidden;
   }}
 
-  .hdr {{ text-align: center; width: 100%; max-width: 460px; }}
+  /* ── Header ── */
+  .hdr {{
+    text-align: center;
+    width: 100%;
+    max-width: 560px;
+    flex-shrink: 0;
+  }}
+
   .hdr h1 {{
-    font-family: 'Syne', sans-serif;
-    font-size: clamp(1.55rem, 5vw, 2.1rem);
-    font-weight: 800;
-    letter-spacing: -0.02em;
-    line-height: 1.15;
-    background: linear-gradient(140deg, #fff 30%, #a5b4fc 100%);
+    font-family: var(--font);
+    font-size: 2.6rem;
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    background: linear-gradient(140deg, #ffffff 25%, #a5b4fc 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    margin-bottom: 0.45rem;
+    margin-bottom: 14px;
   }}
-  .hdr p {{ font-size: 0.9rem; color: var(--muted); line-height: 1.5; }}
 
+  .hdr p {{
+    font-family: var(--font);
+    font-size: 1.05rem;
+    font-weight: 500;
+    color: var(--muted);
+    line-height: 1.55;
+    max-width: 480px;
+    margin: 0 auto;
+  }}
+
+  /* ── Card ── */
   .card {{
     width: 100%;
-    max-width: 460px;
+    max-width: 560px;
+    flex: 1;
+    min-height: 0;
     background: var(--card);
     border: 1px solid var(--bdr);
     border-radius: var(--r);
     overflow: hidden;
     box-shadow:
-      0 0 0 1px rgba(59,107,255,0.07),
-      0 28px 60px rgba(0,0,0,0.55);
+      0 0 0 1px rgba(59,107,255,0.08),
+      0 40px 80px rgba(0,0,0,0.6),
+      0 2px 6px rgba(0,0,0,0.4);
     display: flex;
     flex-direction: column;
   }}
 
+  /* ── Viewport del avatar ── */
   .viewport {{
     position: relative;
     width: 100%;
-    /* Altura fija: suficiente para mostrar el avatar sin cortar el botón */
-    height: clamp(340px, 58vh, 520px);
-    background: #06060e;
+    flex: 1;
+    min-height: 0;
+    background: #05050d;
     overflow: hidden;
     display: flex;
     align-items: center;
@@ -246,7 +300,7 @@ html = f"""
     justify-content: center;
   }}
 
-  /* Nunca escalar más allá de la resolución nativa (720p) */
+  /* Nunca pixelar: no escalar más allá de la resolución nativa */
   #avatar-container video,
   #avatar-container img {{
     display: block;
@@ -260,93 +314,123 @@ html = f"""
     image-rendering: -webkit-optimize-contrast;
   }}
 
+  /* Placeholder */
   .placeholder {{
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.9rem;
+    gap: 16px;
     color: var(--muted);
     text-align: center;
-    padding: 2.5rem;
+    padding: 3rem;
     width: 100%;
     height: 100%;
   }}
-  .placeholder svg {{ width: 48px; height: 48px; opacity: 0.35; }}
-  .placeholder span {{ font-size: 0.85rem; opacity: 0.55; }}
+  .placeholder svg {{
+    width: 64px; height: 64px;
+    opacity: 0.3;
+  }}
+  .placeholder span {{
+    font-family: var(--font);
+    font-size: 1rem;
+    font-weight: 500;
+    opacity: 0.5;
+    letter-spacing: 0.01em;
+  }}
 
+  /* Badge EN VIVO */
   .live-badge {{
     position: absolute;
-    top: 12px; right: 12px;
-    display: flex; align-items: center; gap: 6px;
-    background: rgba(0,0,0,0.6);
-    backdrop-filter: blur(8px);
-    border: 1px solid rgba(255,255,255,0.1);
+    top: 16px; right: 16px;
+    display: flex; align-items: center; gap: 7px;
+    background: rgba(0,0,0,0.65);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.12);
     border-radius: 999px;
-    padding: 4px 10px 4px 8px;
-    font-size: 0.68rem; font-weight: 700;
-    letter-spacing: 0.07em; text-transform: uppercase;
-    color: #fff; opacity: 0;
+    padding: 5px 13px 5px 10px;
+    font-family: var(--font);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: #fff;
+    opacity: 0;
     transition: opacity 0.4s;
     pointer-events: none;
   }}
   .live-badge.on {{ opacity: 1; }}
   .live-dot {{
-    width: 7px; height: 7px;
-    border-radius: 50%; background: #22c55e;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #22c55e;
     animation: pdot 1.5s infinite;
   }}
   @keyframes pdot {{
-    0%,100% {{ box-shadow: 0 0 0 0 rgba(34,197,94,.6); }}
-    50%      {{ box-shadow: 0 0 0 5px rgba(34,197,94,0); }}
+    0%,100% {{ box-shadow: 0 0 0 0 rgba(34,197,94,.65); }}
+    50%      {{ box-shadow: 0 0 0 6px rgba(34,197,94,0); }}
   }}
 
+  /* ── Footer con botón ── */
   .card-footer {{
-    padding: 1rem 1.2rem 1.2rem;
-    display: flex; flex-direction: column; gap: 0.55rem;
+    flex-shrink: 0;
+    padding: 18px 20px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
     border-top: 1px solid var(--bdr);
-    background: rgba(255,255,255,0.015);
+    background: rgba(255,255,255,0.018);
   }}
 
   #action-btn {{
-    width: 100%; height: 50px;
-    border: none; border-radius: 12px;
-    background: linear-gradient(135deg, var(--a1), var(--a2));
+    width: 100%;
+    height: 64px;
+    border: none;
+    border-radius: 16px;
+    background: linear-gradient(135deg, var(--a1) 0%, var(--a2) 100%);
     color: #fff;
-    font-family: 'Syne', sans-serif;
-    font-size: 0.95rem; font-weight: 700; letter-spacing: 0.01em;
+    font-family: var(--font);
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
     cursor: pointer;
     transition: transform 0.15s, box-shadow 0.15s, opacity 0.2s;
-    box-shadow: 0 6px 22px rgba(59,107,255,0.38);
-    position: relative; overflow: hidden;
+    box-shadow: 0 8px 28px rgba(59,107,255,0.42);
+    position: relative;
+    overflow: hidden;
   }}
   #action-btn::after {{
     content: '';
     position: absolute; inset: 0;
-    background: linear-gradient(135deg, rgba(255,255,255,0.13), transparent);
+    background: linear-gradient(135deg, rgba(255,255,255,0.14), transparent 60%);
     pointer-events: none;
   }}
   #action-btn:hover:not(:disabled) {{
     transform: translateY(-2px);
-    box-shadow: 0 10px 30px rgba(59,107,255,0.52);
+    box-shadow: 0 14px 36px rgba(59,107,255,0.56);
   }}
-  #action-btn:active:not(:disabled) {{ transform: translateY(0); opacity: 0.85; }}
-  #action-btn:disabled {{ opacity: 0.45; cursor: not-allowed; transform: none; }}
+  #action-btn:active:not(:disabled) {{
+    transform: translateY(1px);
+    opacity: 0.88;
+  }}
+  #action-btn:disabled {{
+    opacity: 0.42;
+    cursor: not-allowed;
+    transform: none;
+  }}
 
   .status {{
-    text-align: center; font-size: 0.76rem;
-    color: var(--muted); min-height: 1.1em; transition: color 0.3s;
+    text-align: center;
+    font-family: var(--font);
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--muted);
+    min-height: 1.1em;
+    transition: color 0.3s;
+    letter-spacing: 0.01em;
   }}
   .status.ok  {{ color: #4ade80; }}
   .status.err {{ color: #f87171; }}
-
-  @media (max-width: 500px) {{
-    .page {{ padding: 1rem 0.6rem 0.8rem; gap: 0.9rem; }}
-    .card {{ border-radius: 18px; }}
-    .card-footer {{ padding: 0.85rem 0.9rem 1rem; }}
-    #action-btn {{ height: 46px; }}
-    .viewport {{ height: clamp(300px, 55vh, 440px); }}
-  }}
 </style>
 </head>
 <body>
@@ -354,14 +438,14 @@ html = f"""
 
   <div class="hdr">
     <h1>Habla con nuestro agente</h1>
-    <p>Activa el avatar y conversa directamente desde tu pantalla.</p>
+    <p>Conversa con nuestro asistente virtual y conoce todo acerca de Julius Fest</p>
   </div>
 
   <div class="card">
     <div class="viewport">
       <div id="avatar-container">
         <div class="placeholder" id="placeholder">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1">
             <circle cx="12" cy="8" r="4"/>
             <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
           </svg>
@@ -413,10 +497,10 @@ html = f"""
       const parentDoc = window.parent.document;
       const allBtns   = Array.from(parentDoc.querySelectorAll("button"));
 
-      // Buscar por texto exacto (btnLabel cambia según el estado)
+      // Buscar por texto exacto
       let target = allBtns.find(b => b.innerText.trim() === btnLabel);
 
-      // Fallback: primer botón dentro de un stButton container
+      // Fallback: primer botón en un contenedor stButton
       if (!target) {{
         target = allBtns.find(b => b.closest('[data-testid="stButton"]'));
       }}
@@ -512,7 +596,7 @@ html = f"""
         body: JSON.stringify({{ session_id: sessionId, reason: "USER_DISCONNECTED" }})
       }});
       room.disconnect();
-      setStatus("Sesión detenida automáticamente.", "ok");
+      setStatus("Conversación detenida automáticamente.", "ok");
     }} catch (e) {{
       setStatus("Error al detener: " + e.message, "err");
     }}
@@ -521,7 +605,7 @@ html = f"""
   async function connectAvatar() {{
     if (!isRunning) {{
       const saved = storageGet(previewKey);
-      if (!drawPreview(saved)) setStatus("Inicia sesión para hablar con el agente.");
+      if (!drawPreview(saved)) setStatus("Toca el botón para iniciar la conversación.");
       else setStatus("Vista previa de la última sesión.");
       return;
     }}
@@ -529,7 +613,7 @@ html = f"""
     try {{
       await room.connect(livekitUrl, livekitToken);
       await room.localParticipant.setMicrophoneEnabled(true);
-      setStatus("Sesión activa", "ok");
+      setStatus("Conversación activa", "ok");
       setTimeout(stopFromJS, sessionDurMs);
     }} catch (e) {{
       const saved = storageGet(previewKey);
@@ -544,4 +628,4 @@ html = f"""
 </html>
 """
 
-components.html(html, height=760, scrolling=False)
+components.html(html, height=IFRAME_HEIGHT, scrolling=False)
