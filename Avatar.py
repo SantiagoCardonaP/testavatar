@@ -15,7 +15,7 @@ CONTEXT_ID = st.secrets["LIVEAVATAR_CONTEXT_ID"]
 VOICE_ID   = st.secrets["LIVEAVATAR_VOICE_ID"]
 
 BASE_URL            = "https://api.liveavatar.com/v1"
-SESSION_DURATION_MS = 60000
+SESSION_DURATION_MS = 30000
 
 
 def create_session_token():
@@ -76,11 +76,6 @@ is_running = bool(
 )
 
 # ── CSS global de Streamlit ───────────────────────────────────────────────────
-# Pantalla objetivo: 1080×1920px vertical (42").
-# Chrome en modo normal tiene ~56px de barra. Para que la app se vea completa
-# al hacer scroll (y así ocultar la barra), añadimos padding-top: 60px en
-# .stApp — el usuario hace scroll hacia arriba, la barra de Chrome desaparece
-# y la app queda full-screen.
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap');
@@ -92,13 +87,12 @@ st.markdown("""
         background: #0a0a0f !important;
     }
 
-    /* Padding superior = espacio para que Chrome se oculte al hacer scroll */
     .stApp {
-        padding-top: 64px !important;
+        padding-top: 0 !important;
     }
 
     .block-container {
-        max-width: 640px !important;
+        max-width: 480px !important;
         padding-top: 0 !important;
         padding-bottom: 0 !important;
         padding-left: 0.5rem !important;
@@ -166,10 +160,8 @@ session_dur_ms = json.dumps(SESSION_DURATION_MS)
 is_running_js  = json.dumps(is_running)
 btn_label_js   = json.dumps(btn_label)
 
-# Altura del iframe calibrada para 1080×1920px vertical:
-# 1920 - 64 (padding-top Streamlit) - 56 (barra Chrome) - 40 (márgenes Streamlit) ≈ 1780
-# Usamos 1760 con algo de holgura.
-IFRAME_HEIGHT = 1760
+# Altura del iframe calibrada para móvil (aprox. 680–780px de viewport visible).
+IFRAME_HEIGHT = 720
 
 html = f"""
 <!DOCTYPE html>
@@ -190,17 +182,8 @@ html = f"""
     --a2:    #8b3dff;
     --text:  #e8e8f0;
     --muted: #7c849a;
-    --r:     24px;
+    --r:     20px;
     --font:  'Montserrat', sans-serif;
-
-    /* Pantalla 1080×1920 vertical.
-       El iframe tiene {IFRAME_HEIGHT}px de alto.
-       Repartimos: header ~200px + gap + card (viewport + footer).
-       El viewport ocupa el resto disponible. */
-    --header-h:   190px;
-    --footer-h:   130px;  /* botón + status + padding */
-    --gap:        28px;
-    --viewport-h: calc({IFRAME_HEIGHT}px - var(--header-h) - var(--footer-h) - var(--gap) * 2 - 48px);
   }}
 
   html, body {{
@@ -221,8 +204,8 @@ html = f"""
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    padding: 40px 24px 24px;
-    gap: var(--gap);
+    padding: 20px 14px 14px;
+    gap: 14px;
     background:
       radial-gradient(ellipse 80% 35% at 50% 0%, rgba(59,107,255,0.18) 0%, transparent 55%),
       radial-gradient(ellipse 55% 25% at 85% 95%, rgba(139,61,255,0.14) 0%, transparent 50%),
@@ -234,37 +217,37 @@ html = f"""
   .hdr {{
     text-align: center;
     width: 100%;
-    max-width: 560px;
+    max-width: 440px;
     flex-shrink: 0;
   }}
 
   .hdr h1 {{
     font-family: var(--font);
-    font-size: 2.6rem;
+    font-size: clamp(1.4rem, 5.5vw, 1.75rem);
     font-weight: 900;
-    letter-spacing: -0.03em;
-    line-height: 1.1;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
     background: linear-gradient(140deg, #ffffff 25%, #a5b4fc 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    margin-bottom: 14px;
+    margin-bottom: 8px;
   }}
 
   .hdr p {{
     font-family: var(--font);
-    font-size: 1.05rem;
+    font-size: clamp(0.78rem, 3vw, 0.9rem);
     font-weight: 500;
     color: var(--muted);
-    line-height: 1.55;
-    max-width: 480px;
+    line-height: 1.5;
+    max-width: 360px;
     margin: 0 auto;
   }}
 
   /* ── Card ── */
   .card {{
     width: 100%;
-    max-width: 560px;
+    max-width: 440px;
     flex: 1;
     min-height: 0;
     background: var(--card);
@@ -273,7 +256,7 @@ html = f"""
     overflow: hidden;
     box-shadow:
       0 0 0 1px rgba(59,107,255,0.08),
-      0 40px 80px rgba(0,0,0,0.6),
+      0 20px 50px rgba(0,0,0,0.6),
       0 2px 6px rgba(0,0,0,0.4);
     display: flex;
     flex-direction: column;
@@ -320,20 +303,20 @@ html = f"""
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 16px;
+    gap: 12px;
     color: var(--muted);
     text-align: center;
-    padding: 3rem;
+    padding: 2rem;
     width: 100%;
     height: 100%;
   }}
   .placeholder svg {{
-    width: 64px; height: 64px;
+    width: 44px; height: 44px;
     opacity: 0.3;
   }}
   .placeholder span {{
     font-family: var(--font);
-    font-size: 1rem;
+    font-size: 0.85rem;
     font-weight: 500;
     opacity: 0.5;
     letter-spacing: 0.01em;
@@ -342,15 +325,15 @@ html = f"""
   /* Badge EN VIVO */
   .live-badge {{
     position: absolute;
-    top: 16px; right: 16px;
-    display: flex; align-items: center; gap: 7px;
+    top: 10px; right: 10px;
+    display: flex; align-items: center; gap: 6px;
     background: rgba(0,0,0,0.65);
     backdrop-filter: blur(10px);
     border: 1px solid rgba(255,255,255,0.12);
     border-radius: 999px;
-    padding: 5px 13px 5px 10px;
+    padding: 4px 10px 4px 8px;
     font-family: var(--font);
-    font-size: 0.72rem;
+    font-size: 0.65rem;
     font-weight: 700;
     letter-spacing: 0.09em;
     text-transform: uppercase;
@@ -361,20 +344,20 @@ html = f"""
   }}
   .live-badge.on {{ opacity: 1; }}
   .live-dot {{
-    width: 8px; height: 8px;
+    width: 7px; height: 7px;
     border-radius: 50%;
     background: #22c55e;
     animation: pdot 1.5s infinite;
   }}
   @keyframes pdot {{
     0%,100% {{ box-shadow: 0 0 0 0 rgba(34,197,94,.65); }}
-    50%      {{ box-shadow: 0 0 0 6px rgba(34,197,94,0); }}
+    50%      {{ box-shadow: 0 0 0 5px rgba(34,197,94,0); }}
   }}
 
   /* ── Footer con botón ── */
   .card-footer {{
     flex-shrink: 0;
-    padding: 18px 20px 22px;
+    padding: 12px 14px 14px;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -384,18 +367,18 @@ html = f"""
 
   #action-btn {{
     width: 100%;
-    height: 64px;
+    height: 52px;
     border: none;
-    border-radius: 16px;
+    border-radius: 14px;
     background: linear-gradient(135deg, var(--a1) 0%, var(--a2) 100%);
     color: #fff;
     font-family: var(--font);
-    font-size: 1.15rem;
+    font-size: 0.97rem;
     font-weight: 700;
     letter-spacing: 0.01em;
     cursor: pointer;
     transition: transform 0.15s, box-shadow 0.15s, opacity 0.2s;
-    box-shadow: 0 8px 28px rgba(59,107,255,0.42);
+    box-shadow: 0 6px 22px rgba(59,107,255,0.42);
     position: relative;
     overflow: hidden;
   }}
@@ -407,7 +390,7 @@ html = f"""
   }}
   #action-btn:hover:not(:disabled) {{
     transform: translateY(-2px);
-    box-shadow: 0 14px 36px rgba(59,107,255,0.56);
+    box-shadow: 0 12px 30px rgba(59,107,255,0.56);
   }}
   #action-btn:active:not(:disabled) {{
     transform: translateY(1px);
@@ -422,10 +405,10 @@ html = f"""
   .status {{
     text-align: center;
     font-family: var(--font);
-    font-size: 0.82rem;
+    font-size: 0.75rem;
     font-weight: 500;
     color: var(--muted);
-    min-height: 1.1em;
+    min-height: 1em;
     transition: color 0.3s;
     letter-spacing: 0.01em;
   }}
